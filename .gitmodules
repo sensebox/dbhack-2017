@@ -1,0 +1,3 @@
+[submodule "dbhack-2017-frontend"]
+	path = dbhack-2017-frontend
+	url = https://github.com/sensebox/dbhack-2017-frontend.git
