@@ -8,22 +8,86 @@ import geocoder
 import time
 import requests
 import re
- 
+import json
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
+
+def send_request(name, lat, lng):
+  # Request (3)
+  # POST http://boiling-taiga-24096.herokuapp.com/locations
+
+  try:
+    response = requests.post(
+        url="http://boiling-taiga-24096.herokuapp.com/api/locations",
+        headers={
+          # "Cookie": "laravel_session=eyJpdiI6IkgzdGVjdUFwOFpBQ3B0VnBFK3kxZkE9PSIsInZhbHVlIjoiK2VjV3NNdmVDTkd6VnNjRkEzeEpzRVpuT2hYcDUxa0xGTXZFbzlxQjdOWTNqNWdmbWNxVDE4cWs4RVNjWVJmSnkxbWZZMEQxYldDZHJxMmhSUFdxV0E9PSIsIm1hYyI6ImEyNzIyMmY0NzcwMWJhMzRhYmIwNjNiNjY3ODJiN2M1YzhlMzA2MDY0MGUxZWJhMTYzNGUxMTFiYWMyZGFkNDQifQ%3D%3D",
+          "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+        },
+        data={
+          "name": name,
+          "longitude": lng,
+          "latitude": lat
+        },
+    )
+    
+    return response
+    # print('Response HTTP Status Code: {status_code}'.format(
+    #   status_code=response.status_code))
+    # print('Response HTTP Response Body: {content}'.format(
+    #   content=response.content))
+  except requests.exceptions.RequestException:
+      print('HTTP Request failed')
+
+def send_request_ticket(signature, description, dep_name, dep_lat, dep_lng, dest_name, dest_lat, dest_lng, ocr_text, dep_id, dest_id, image):
+  # Request (3)
+  # POST http://boiling-taiga-24096.herokuapp.com/locations
+
+  try:
+    print("POST ticket")
+    print(dep_id)
+    print(dest_id)
+    response = requests.post(
+        url="http://boiling-taiga-24096.herokuapp.com/tickets",
+        headers={
+          # "Cookie": "laravel_session=eyJpdiI6IkgzdGVjdUFwOFpBQ3B0VnBFK3kxZkE9PSIsInZhbHVlIjoiK2VjV3NNdmVDTkd6VnNjRkEzeEpzRVpuT2hYcDUxa0xGTXZFbzlxQjdOWTNqNWdmbWNxVDE4cWs4RVNjWVJmSnkxbWZZMEQxYldDZHJxMmhSUFdxV0E9PSIsIm1hYyI6ImEyNzIyMmY0NzcwMWJhMzRhYmIwNjNiNjY3ODJiN2M1YzhlMzA2MDY0MGUxZWJhMTYzNGUxMTFiYWMyZGFkNDQifQ%3D%3D",
+          # "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+        },
+        data={
+          "signature": signature,
+          "description": description,
+          "ocr_text": ocr_text,
+          "point_of_departure_id": dep_id,
+          "destination_id": dest_id
+          # "image": (signature, open(image, 'rb'))
+        },
+        files={
+          "image": (signature, open(image, 'rb'))
+        }  
+    )
+    print('Response HTTP Status Code: {status_code}'.format(status_code=response.status_code))
+    print('Response HTTP Response Body: {content}'.format(content=response.content))
+  except requests.exceptions.RequestException:
+      print('HTTP Request failed')
+
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", required=True,help="path to input image to be OCR'd")
-ap.add_argument("-p", "--preprocess", type=str, default="thresh",help="type of preprocessing to be done")
+ap.add_argument("-i", "--image", required=False,help="path to input image to be OCR'd")
+ap.add_argument("-p", "--path", required=False,help="path containing images")
 args = vars(ap.parse_args())
 
 path = "./dbhack/III.5.09-30/"
+if args["path"]:
+  path = args["path"]
+  pass
+ 
 dirs = os.listdir( path )
 
 for file in dirs:
   print(file)
+  imagePath = path + file
   image = cv2.imread(path + file)
   filename = "{}.jpg".format(os.getpid())
-  # image = cv2.imread(path+file)
-  # originalFile = path + file
+
   cv2.imwrite(filename, image)
   text = pytesseract.image_to_string(Image.open(filename), lang='deu')
   os.remove(filename)
@@ -32,76 +96,57 @@ for file in dirs:
   print(words)
   
   pattern = re.compile('([^\W\d])+')
+ 
+  word_results = []
+  destination_longitude = 0
+  destination_latitude = 0
+  destination_name = ""
+  departure_longitude = 0
+  departure_latitude = 0
+  departure_name = ""
+  departure_id = 0
+  destination_id = 0
+
   for word in words:
     for m in re.finditer(pattern, word):
+      word_results.append(m.group(0))
       if len(m.group(0)) > 3:
         with requests.Session() as session:
           searchString = m.group(0)
           print("Geocode: " + searchString)
           g = geocoder.arcgis(searchString, session=session)
           print(g.json)
-          time.sleep(3)  
+          if not g.ok:
+            pass
+          else:
+            lat = 0
+            lng = 0
+            name =""
+            for result in g:
+              lat = result.lat
+              lng = result.lng
+              name = result.address
+              pass
+            if lng > 36.6 or lng < -9.2 or lat > 58.5 or lat < 33.2:
+              pass
+            else:
+              response = send_request(name, lat, lng)
+              locationId = (json.loads(response.text)['id'])
+              locationName = (json.loads(response.text)['name'])
+              # print(locationName)
+              print(fuzz.partial_ratio(name, searchString))
+              if fuzz.partial_ratio(name, searchString) > 75:
+                if departure_id == 0:
+                  departure_id = locationId
+                  pass
+                elif destination_id == 0:
+                  destination_id = locationId
+                  pass
+                pass
+            pass
+          time.sleep(1)
         pass
-
-  # for word in words:
-    # results = re.split(r'([^\W\d])+', word)
-    # print(results)
-    # for result in results:
-      # print(result)
-    # with requests.Session() as session:
-    #   print("Geocode: " + word)
-    #   searchString = word.replace(" ", "")
-    #   g = geocoder.arcgis(searchString, session=session)
-    #   print(g.json)
-    # time.sleep(3)
-    # pass
+  sig = os.path.splitext(file)[0]
+  send_request_ticket(sig, "", "", "", "", "", "", "", json.dumps(word_results), departure_id, destination_id, path+file),
   print("NEXT FILE")
 
-
-
-# load the example image and convert it to grayscale
-# image = cv2.imread(args["image"])
-# gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-# check to see if we should apply thresholding to preprocess the
-# image
-# if args["preprocess"] == "thresh": gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
-
-# make a check to see if median blurring should be done to remove
-# noise
-# elif args["preprocess"] == "blur": gray = cv2.medianBlur(gray, 3)
-
-# elif args["preprocess"] == "gauss": gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 12)
-
-# elif args["preprocess"] == "mean": gray = cv2.adaptiveThreshold(gray,180,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,9,12)
-
-# elif args["preprocess"] == "canny": gray =cv2.Canny(gray, 100, 125)
-
-# write the grayscale image to disk as a temporary file so we can
-# apply OCR to it
-# filename = "{}.png".format(os.getpid())
-# cv2.imwrite(filename, image)
-
-# load the image as a PIL/Pillow image, apply OCR, and then delete
-# the temporary file
-# text = pytesseract.image_to_string(Image.open(filename), lang='deu')
-# os.remove(filename)
-# print(text)
-
-# words = text.splitlines()
-# print(words)
-
-# for word in words:
-# 	with requests.Session() as session:
-# 		print("Geocode: " + word)
-# 		searchString = word.replace(" ", "")
-# 		g = geocoder.arcgis(searchString, session=session)
-# 		print(g.json)
-# 	time.sleep(3)
-# 	pass
-
-# show the output images
-# cv2.imshow("Image", image)
-# cv2.imshow("Output", gray)
-# cv2.imwrite("test.png", gray)
-# cv2.waitKey(0)
