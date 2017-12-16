@@ -7,6 +7,7 @@ import os
 import geocoder
 import time
 import requests
+import re
  
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -29,15 +30,31 @@ for file in dirs:
   print(text)
   words = text.splitlines()
   print(words)
-
+  
+  pattern = re.compile('([^\W\d])+')
   for word in words:
-	  with requests.Session() as session:
-		  print("Geocode: " + word)
-		  searchString = word.replace(" ", "")
-		  g = geocoder.arcgis(searchString, session=session)
-		  print(g.json)
-	  time.sleep(3)
-	  pass
+    for m in re.finditer(pattern, word):
+      if len(m.group(0)) > 3:
+        with requests.Session() as session:
+          searchString = m.group(0)
+          print("Geocode: " + searchString)
+          g = geocoder.arcgis(searchString, session=session)
+          print(g.json)
+          time.sleep(3)  
+        pass
+
+  # for word in words:
+    # results = re.split(r'([^\W\d])+', word)
+    # print(results)
+    # for result in results:
+      # print(result)
+    # with requests.Session() as session:
+    #   print("Geocode: " + word)
+    #   searchString = word.replace(" ", "")
+    #   g = geocoder.arcgis(searchString, session=session)
+    #   print(g.json)
+    # time.sleep(3)
+    # pass
   print("NEXT FILE")
 
 
